@@ -1,8 +1,39 @@
 // Configuração da API
 const API_BASE = window.location.origin + '/api';
 
+// Verificar autenticação
+async function checkAuth() {
+    try {
+        const response = await fetch(`${API_BASE}/user`);
+        const data = await response.json();
+        
+        if (!data.user || !data.user.is_admin) {
+            window.location.href = '/login';
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('Erro ao verificar autenticação:', error);
+        window.location.href = '/login';
+        return false;
+    }
+}
+
+// Logout
+async function logout() {
+    try {
+        await fetch(`${API_BASE}/logout`, { method: 'POST' });
+        window.location.href = '/login';
+    } catch (error) {
+        console.error('Erro no logout:', error);
+    }
+}
+
 // Mostrar seção específica
-function showSection(sectionName) {
+async function showSection(sectionName) {
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) return;
+
     // Esconder todas as seções
     document.querySelectorAll('.section').forEach(section => {
         section.style.display = 'none';
