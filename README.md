@@ -2,16 +2,19 @@
 
 Sistema completo para gerenciamento e exibição de catálogo de produtos online.
 
-## 🌐 URLs do Sistema
+## Funcionalidades
 
-- **Catálogo Público**: `/` ou `http://localhost:5000/`
-- **Dashboard Admin**: `/admin` ou `http://localhost:5000/admin`
-- **API Health Check**: `/api/health`
+- Catálogo público de produtos
+- Dashboard administrativo
+- Upload de imagens
+- Importação via CSV
+- Design responsivo
 
-## 🚀 Como Executar
+## Tecnologias
 
-### Desenvolvimento Local
+- Python Flask
+- SQLite/PostgreSQL
+- Bootstrap 5
+- JavaScript
 
-1. **Instalar dependências:**
-```bash
-pip install -r requirements.txt
+## Desenvolvido por Michel

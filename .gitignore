@@ -1,3 +1,4 @@
+# Arquivo .gitignore para Catalogo Online
 __pycache__/
 *.pyc
 *.pyo
