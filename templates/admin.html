@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Catálogo Online</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse bg-dark">
+                <div class="position-sticky pt-3">
+                    <h4 class="text-white text-center mb-4">
+                        <i class="fas fa-cog"></i> Dashboard
+                    </h4>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" onclick="showSection('products')">
+                                <i class="fas fa-box"></i> Gerenciar Produtos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('add-product')">
+                                <i class="fas fa-plus"></i> Adicionar Produto
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('import')">
+                                <i class="fas fa-file-import"></i> Importar Produtos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/" target="_blank">
+                                <i class="fas fa-eye"></i> Ver Catálogo
+                            </a>
+                        </li>
+                    </ul>
+                    
+                    <!-- Status do Sistema -->
+                    <div class="mt-5 p-3 bg-secondary rounded">
+                        <h6 class="text-white"><i class="fas fa-info-circle"></i> Status do Sistema</h6>
+                        <div id="system-status">
+                            <small class="text-warning">
+                                <i class="fas fa-sync fa-spin"></i> Verificando...
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <!-- Header -->
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">
+                        <i class="fas fa-tachometer-alt"></i> Painel de Controle
+                    </h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="loadProductsTable()">
+                                <i class="fas fa-redo"></i> Atualizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seção de Gerenciar Produtos -->
+                <div id="products-section" class="section">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3><i class="fas fa-boxes"></i> Gerenciar Produtos</h3>
+                        <span class="badge bg-primary" id="products-count">Carregando...</span>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th width="50">ID</th>
+                                    <th width="80">Imagem</th>
+                                    <th>Nome</th>
+                                    <th width="120">Preço</th>
+                                    <th width="150">Categoria</th>
+                                    <th width="150">Data</th>
+                                    <th width="120">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="products-table">
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Carregando...</span>
+                                        </div>
+                                        <p class="mt-2 mb-0">Carregando produtos...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Seção de Adicionar Produto -->
+                <div id="add-product-section" class="section" style="display: none;">
+                    <h3><i class="fas fa-plus-circle"></i> Adicionar Novo Produto</h3>
+                    
+                    <form id="add-product-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card mb-4">
+                                    <div class="card-header bg-primary text-white">
+                                        <i class="fas fa-info-circle"></i> Informações Básicas
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="product-name" class="form-label">Nome do Produto *</label>
+                                            <input type="text" class="form-control" id="product-name" required 
+                                                   placeholder="Ex: Smartphone Samsung Galaxy">
+                                            <div class="form-text">Nome descritivo do produto</div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="product-price" class="form-label">Preço *</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text">R$</span>
+                                                <input type="number" step="0.01" class="form-control" id="product-price" required 
+                                                       placeholder="Ex: 999.90" min="0">
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="product-category" class="form-label">Categoria</label>
+                                            <input type="text" class="form-control" id="product-category" 
+                                                   placeholder="Ex: Eletrônicos, Roupas, etc.">
+                                            <div class="form-text">Categoria para organização</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card mb-4">
+                                    <div class="card-header bg-info text-white">
+                                        <i class="fas fa-align-left"></i> Detalhes Adicionais
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="product-description" class="form-label">Descrição</label>
+                                            <textarea class="form-control" id="product-description" rows="4" 
+                                                      placeholder="Descreva o produto detalhadamente..."></textarea>
+                                            <div class="form-text">Descrição completa do produto</div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="product-image" class="form-label">Imagem do Produto</label>
+                                            <input type="file" class="form-control" id="product-image" accept="image/*">
+                                            <div class="form-text">
+                                                Formatos: JPG, PNG, GIF (máx. 5MB). 
+                                                <span class="text-muted">Opcional</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-secondary me-md-2" onclick="showSection('products')">
+                                <i class="fas fa-arrow-left"></i> Voltar
+                            </button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save"></i> Salvar Produto
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Seção de Importar Produtos -->
+                <div id="import-section" class="section" style="display: none;">
+                    <h3><i class="fas fa-file-import"></i> Importar Produtos em Lote</h3>
+                    
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header bg-warning text-dark">
+                                    <i class="fas fa-file-csv"></i> Importar via CSV
+                                </div>
+                                <div class="card-body">
+                                    <form id="import-form">
+                                        <div class="mb-3">
+                                            <label for="import-file" class="form-label">Selecionar Arquivo CSV</label>
+                                            <input type="file" class="form-control" id="import-file" accept=".csv" required>
+                                            <div class="form-text">
+                                                Selecione um arquivo CSV com os dados dos produtos
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                            <button type="button" class="btn btn-secondary me-md-2" onclick="showSection('products')">
+                                                <i class="fas fa-arrow-left"></i> Voltar
+                                            </button>
+                                            <button type="submit" class="btn btn-warning">
+                                                <i class="fas fa-upload"></i> Importar Produtos
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <i class="fas fa-question-circle"></i> Instruções
+                                </div>
+                                <div class="card-body">
+                                    <h6>Formato do CSV:</h6>
+                                    <ul class="small">
+                                        <li><strong>Colunas obrigatórias:</strong> <code>name</code>, <code>price</code></li>
+                                        <li><strong>Colunas opcionais:</strong> <code>description</code>, <code>category</code></li>
+                                    </ul>
+                                    
+                                    <h6>Exemplo:</h6>
+                                    <pre class="bg-light p-2 small">name,price,description,category
+Produto A,100.00,Descrição do produto A,Categoria 1
+Produto B,200.00,Descrição do produto B,Categoria 2</pre>
+                                    
+                                    <div class="alert alert-warning small mb-0">
+                                        <i class="fas fa-exclamation-triangle"></i> 
+                                        <strong>Atenção:</strong> Certifique-se de que o arquivo está no formato UTF-8.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Estatísticas Rápidas -->
+                <div class="row mt-4" id="stats-section" style="display: none;">
+                    <div class="col-md-3">
+                        <div class="card text-white bg-primary">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 id="total-products">0</h4>
+                                        <p class="mb-0">Total de Produtos</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-boxes fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-success">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 id="total-categories">0</h4>
+                                        <p class="mb-0">Categorias</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-tags fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-warning">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 id="products-with-images">0</h4>
+                                        <p class="mb-0">Com Imagens</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-image fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-info">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 id="avg-price">R$ 0</h4>
+                                        <p class="mb-0">Preço Médio</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-dollar-sign fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal para Editar Produto -->
+    <div class="modal fade" id="editProductModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit"></i> Editar Produto
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-product-form">
+                        <input type="hidden" id="edit-product-id">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="edit-product-name" class="form-label">Nome do Produto *</label>
+                                    <input type="text" class="form-control" id="edit-product-name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-product-price" class="form-label">Preço *</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">R$</span>
+                                        <input type="number" step="0.01" class="form-control" id="edit-product-price" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-product-category" class="form-label">Categoria</label>
+                                    <input type="text" class="form-control" id="edit-product-category">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="edit-product-description" class="form-label">Descrição</label>
+                                    <textarea class="form-control" id="edit-product-description" rows="4"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-product-image" class="form-label">URL da Imagem</label>
+                                    <input type="text" class="form-control" id="edit-product-image" 
+                                           placeholder="Deixe em branco para manter a imagem atual">
+                                    <div class="form-text">URL completa da imagem ou nome do arquivo</div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="updateProduct()">
+                        <i class="fas fa-save"></i> Salvar Alterações
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação de Exclusão -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Tem certeza que deseja excluir o produto <strong id="delete-product-name">[Nome do Produto]</strong>?</p>
+                    <p class="text-danger"><small>Esta ação não pode ser desfeita.</small></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+                        <i class="fas fa-trash"></i> Sim, Excluir
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    
+    <script>
+        // Função para verificar status do sistema
+        async function checkSystemStatus() {
+            try {
+                const response = await fetch('{{ url_for("health_check") }}');
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('system-status');
+                if (response.ok) {
+                    statusElement.innerHTML = `
+                        <small class="text-success">
+                            <i class="fas fa-check-circle"></i> Sistema Online
+                        </small>
+                    `;
+                } else {
+                    statusElement.innerHTML = `
+                        <small class="text-danger">
+                            <i class="fas fa-exclamation-circle"></i> Sistema Offline
+                        </small>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('system-status').innerHTML = `
+                    <small class="text-danger">
+                        <i class="fas fa-exclamation-circle"></i> Erro de Conexão
+                    </small>
+                `;
+            }
+        }
+        
+        // Verificar status ao carregar a página
+        document.addEventListener('DOMContentLoaded', function() {
+            checkSystemStatus();
+            // Verificar status a cada 30 segundos
+            setInterval(checkSystemStatus, 30000);
+        });
+    </script>
+</body>
+</html>
