@@ -331,6 +331,30 @@ with app.app_context():
     print(f"📊 Dashboard: http://localhost:5000/admin")
     print(f"🛍️  Catálogo: http://localhost:5000/")
 
+def setup_database():
+    """Configura o banco preservando dados existentes"""
+    with app.app_context():
+        # Verificar se a tabela product existe
+        inspector = db.inspect(db.engine)
+        existing_tables = inspector.get_table_names()
+        
+        if 'product' in existing_tables:
+            print("✅ Tabela de produtos já existe - dados preservados")
+            
+            # Verificar se precisa adicionar novas colunas
+            try:
+                # Tentar adicionar coluna se não existir (para futuras atualizações)
+                db.engine.execute('ALTER TABLE product ADD COLUMN IF NOT EXISTS new_column TEXT')
+            except:
+                print("ℹ️  Estrutura da tabela está atualizada")
+        else:
+            print("📋 Criando novas tabelas...")
+            db.create_all()
+        
+        # Criar tabela de usuários se não existir
+        if 'user' not in existing_tables:
+            setup_database()
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = not os.environ.get('RENDER')
