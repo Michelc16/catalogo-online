@@ -43,27 +43,87 @@ function displayUsers(users) {
     }
     
     usersList.innerHTML = users.map(user => `
-        <div class="d-flex justify-content-between align-items-center mb-3 p-2 border rounded">
-            <div>
-                <strong>${user.username}</strong><br>
-                <small class="text-muted">${user.email}</small><br>
-                <span class="badge ${user.is_admin ? 'bg-success' : 'bg-secondary'}">
-                    ${user.is_admin ? 'Administrador' : 'Usuário'}
-                </span>
-                <span class="badge ${user.is_active ? 'bg-primary' : 'bg-danger'}">
-                    ${user.is_active ? 'Ativo' : 'Inativo'}
-                </span>
+        <div class="d-flex justify-content-between align-items-center mb-3 p-3 border rounded">
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center mb-2">
+                    <strong class="me-2">${user.username}</strong>
+                    <span class="badge ${user.is_admin ? 'bg-success' : 'bg-secondary'}">
+                        ${user.is_admin ? 'Administrador' : 'Usuário'}
+                    </span>
+                    <span class="badge ${user.is_active ? 'bg-primary' : 'bg-danger'} ms-1">
+                        ${user.is_active ? 'Ativo' : 'Inativo'}
+                    </span>
+                </div>
+                <div>
+                    <small class="text-muted">${user.email}</small><br>
+                    <small class="text-muted">ID: ${user.id} | Criado: ${new Date(user.created_at).toLocaleDateString('pt-BR')}</small>
+                </div>
             </div>
-            <div>
+            <div class="btn-group-vertical">
                 ${user.id !== currentUser.id ? `
                     <button class="btn btn-sm ${user.is_active ? 'btn-warning' : 'btn-success'}" 
-                            onclick="toggleUser(${user.id})">
-                        ${user.is_active ? 'Desativar' : 'Ativar'}
+                            onclick="toggleUser(${user.id})" title="${user.is_active ? 'Desativar' : 'Ativar'}">
+                        <i class="fas fa-${user.is_active ? 'pause' : 'play'}"></i>
                     </button>
-                ` : '<small class="text-muted">Você</small>'}
+                    ${user.is_admin ? `
+                        <button class="btn btn-sm btn-secondary" onclick="demoteUser(${user.id})" title="Rebaixar para Usuário">
+                            <i class="fas fa-arrow-down"></i>
+                        </button>
+                    ` : `
+                        <button class="btn btn-sm btn-primary" onclick="promoteUser(${user.id})" title="Promover a Admin">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                    `}
+                ` : `
+                    <small class="text-muted">Você</small>
+                `}
             </div>
         </div>
     `).join('');
+}
+
+// Promover usuário a admin
+async function promoteUser(userId) {
+    if (!confirm('Tem certeza que deseja promover este usuário a administrador?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/admin/users/${userId}/promote`, {
+            method: 'PUT'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(result.message, 'success');
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        showMessage('Erro: ' + error.message, 'error');
+    }
+}
+
+// Rebaixar admin para usuário normal
+async function demoteUser(userId) {
+    if (!confirm('Tem certeza que deseja rebaixar este administrador para usuário comum?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/admin/users/${userId}/demote`, {
+            method: 'PUT'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(result.message, 'success');
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        showMessage('Erro: ' + error.message, 'error');
+    }
 }
 
 // Convidar admin

@@ -17,9 +17,13 @@ app = Flask(__name__,
     static_url_path=''
 )
 
-# Configuração do banco de dados
-if os.environ.get('DATABASE_URL'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL'].replace('postgres://', 'postgresql://')
+# Configuração do banco de dados - CORRIGIDA PARA RENDER
+database_url = os.environ.get('DATABASE_URL')
+
+if database_url:
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(basedir, "catalogo.db")}'
 
@@ -272,6 +276,55 @@ def toggle_user(user_id):
         db.session.rollback()
         return jsonify({"error": f"Erro ao alterar usuário: {str(e)}"}), 400
 
+@app.route('/api/admin/users/<int:user_id>/promote', methods=['PUT'])
+@admin_required
+def promote_user(user_id):
+    """Promover usuário para admin"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        # Não permitir modificar a si mesmo
+        if user.id == session['user_id']:
+            return jsonify({"error": "Não é possível modificar sua própria conta"}), 400
+        
+        user.is_admin = True
+        db.session.commit()
+        
+        return jsonify({"message": "Usuário promovido a administrador com sucesso", "user": user.to_dict()})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao promover usuário: {str(e)}"}), 400
+
+@app.route('/api/admin/users/<int:user_id>/demote', methods=['PUT'])
+@admin_required
+def demote_user(user_id):
+    """Rebaixar admin para usuário normal"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        # Não permitir modificar a si mesmo
+        if user.id == session['user_id']:
+            return jsonify({"error": "Não é possível modificar sua própria conta"}), 400
+        
+        # Verificar se é o último admin
+        admin_count = User.query.filter_by(is_admin=True).count()
+        if admin_count <= 1 and user.is_admin:
+            return jsonify({"error": "Não é possível remover o último administrador"}), 400
+        
+        user.is_admin = False
+        db.session.commit()
+        
+        return jsonify({"message": "Administrador rebaixado a usuário comum com sucesso", "user": user.to_dict()})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao rebaixar usuário: {str(e)}"}), 400
+
 # ===== ROTAS PROTEGIDAS =====
 @app.route('/admin')
 def admin_page():
@@ -414,6 +467,7 @@ def setup_database():
             db.session.commit()
             print("👤 Usuário admin criado: admin / admin123")
 
+# Inicialização
 with app.app_context():
     setup_database()
     print("✅ Sistema de Catálogo Online com Autenticação inicializado!")

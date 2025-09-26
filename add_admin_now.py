@@ -1,142 +1,166 @@
 import requests
 import json
+import sys
 
-def add_admin_complete():
-    """Solução completa para adicionar admin"""
+def add_admin_now():
+    print("=== ADICIONAR NOVO ADMINISTRADOR ===\n")
     
-    BASE_URL = "https://catalogo-online-0i96.onrender.com"
+    # Configurações
+    BASE_URL = "http://localhost:5000"  # Altere para sua URL do Render se necessário
     
-    print("=== ADICIONAR NOVO ADMINISTRADOR ===")
-    print()
+    # Coletar dados
+    new_username = input("Username do novo admin: ").strip()
+    new_email = input("Email do novo admin: ").strip()
+    new_password = input("Password do novo admin: ").strip()
+    admin_username = input("Seu username admin: ").strip()
+    admin_password = input("Sua password admin: ").strip()
     
-    # Dados do novo usuário admin
-    new_user = {
-        "username": input("Username do novo admin: ").strip(),
-        "email": input("Email do novo admin: ").strip(),
-        "password": input("Password do novo admin: ").strip()
-    }
+    print("\n1. Registrando novo usuário...")
     
-    # Dados do admin atual (SEUS dados)
-    admin_user = {
-        "username": input("Seu username admin: ").strip(),
-        "password": input("Sua password admin: ").strip()
-    }
-    
+    # Registrar novo usuário
     try:
-        print()
-        print("1. Registrando novo usuário...")
+        register_data = {
+            "username": new_username,
+            "email": new_email,
+            "password": new_password
+        }
         
-        # Registrar novo usuário
-        register_response = requests.post(
-            f"{BASE_URL}/api/register",
-            json=new_user,
-            timeout=10
-        )
+        response = requests.post(f"{BASE_URL}/api/register", json=register_data)
         
-        if register_response.status_code == 201:
+        if response.status_code == 201:
             print("✅ Novo usuário registrado!")
-        elif register_response.status_code == 400:
-            error_msg = register_response.json().get('error', 'Erro desconhecido')
-            if "já existe" in error_msg:
-                print("ℹ️  Usuário já existe, continuando...")
-            else:
-                print(f"❌ Erro no registro: {error_msg}")
-                return
         else:
-            print(f"❌ Erro no registro: {register_response.status_code}")
+            error_msg = response.json().get('error', 'Erro desconhecido')
+            print(f"❌ Erro no registro: {error_msg}")
             return
+    except Exception as e:
+        print(f"❌ Erro de conexão: {e}")
+        return
+    
+    print("\n2. Fazendo login como admin...")
+    
+    # Login como admin
+    session = requests.Session()
+    try:
+        login_data = {
+            "username": admin_username,
+            "password": admin_password
+        }
         
-        print()
-        print("2. Fazendo login como admin...")
+        response = session.post(f"{BASE_URL}/api/login", json=login_data)
         
-        # Login como admin
-        login_response = requests.post(
-            f"{BASE_URL}/api/login",
-            json=admin_user,
-            timeout=10
-        )
-        
-        if login_response.status_code != 200:
-            print(f"❌ Erro no login admin: {login_response.json().get('error', 'Erro desconhecido')}")
+        if response.status_code == 200:
+            print("✅ Login admin realizado!")
+        else:
+            error_msg = response.json().get('error', 'Erro desconhecido')
+            print(f"❌ Erro no login: {error_msg}")
             return
+    except Exception as e:
+        print(f"❌ Erro de conexão: {e}")
+        return
+    
+    print("\n3. Buscando usuários...")
+    
+    # Buscar lista de usuários
+    try:
+        response = session.get(f"{BASE_URL}/api/admin/users")
         
-        print("✅ Login admin realizado!")
-        
-        print()
-        print("3. Buscando usuários...")
-        
-        # Buscar usuários
-        users_response = requests.get(
-            f"{BASE_URL}/api/admin/users",
-            cookies=login_response.cookies,
-            timeout=10
-        )
-        
-        if users_response.status_code != 200:
-            print("❌ Acesso negado ou rota não implementada")
-            print("📝 Implementando sistema de promoção...")
-            implement_promotion_system()
-            return
-        
-        users = users_response.json()
-        print(f"✅ {len(users)} usuários encontrados")
-        
-        # Encontrar o novo usuário
-        target_user = None
-        for user in users:
-            if user['username'] == new_user['username']:
-                target_user = user
-                break
-        
-        if not target_user:
-            print("❌ Novo usuário não encontrado na lista")
-            print("📋 Usuários disponíveis:")
-            for user in users:
-                print(f"   - {user['username']} ({user['email']}) - Admin: {user['is_admin']}")
-            return
-        
-        print()
-        print("4. Promovendo usuário a admin...")
-        
-        # Promover usuário (se a rota existir)
-        promote_response = requests.put(
-            f"{BASE_URL}/api/admin/users/{target_user['id']}/promote",
-            cookies=login_response.cookies,
-            timeout=10
-        )
-        
-        if promote_response.status_code == 200:
-            print("🎉 Usuário promovido a administrador com sucesso!")
-            print()
-            print("📋 RESUMO:")
-            print(f"   👤 Usuário: {new_user['username']}")
-            print(f"   📧 Email: {new_user['email']}")
-            print(f"   🔑 Password: {new_user['password']}")
-            print(f"   🌐 URL: {BASE_URL}/admin")
-            print()
-            print("⚠️  Compartilhe estas credenciais com segurança!")
+        if response.status_code == 200:
+            users = response.json()
+            print(f"✅ {len(users)} usuários encontrados")
             
-        elif promote_response.status_code == 404:
-            print("❌ Rota de promoção não implementada ainda")
-            implement_promotion_system()
+            # Encontrar o novo usuário
+            new_user = None
+            for user in users:
+                if user['username'] == new_username:
+                    new_user = user
+                    break
+            
+            if new_user:
+                print(f"✅ Novo usuário encontrado (ID: {new_user['id']})")
+                
+                # Promover a admin
+                print("\n4. Promovendo usuário a administrador...")
+                
+                promote_response = session.put(f"{BASE_URL}/api/admin/users/{new_user['id']}/promote")
+                
+                if promote_response.status_code == 200:
+                    print("✅ Usuário promovido a administrador com sucesso!")
+                    print(f"\n🎉 CONCLUÍDO! {new_username} agora é administrador!")
+                else:
+                    error_msg = promote_response.json().get('error', 'Erro desconhecido')
+                    print(f"❌ Erro na promoção: {error_msg}")
+            else:
+                print("❌ Novo usuário não encontrado na lista")
+                
         else:
-            print(f"❌ Erro na promoção: {promote_response.json()}")
+            print("❌ Acesso negado ou rota não implementada")
+            print("\n📝 Implementando sistema de promoção...")
+            implement_promotion_system()
             
     except Exception as e:
         print(f"❌ Erro: {e}")
+        implement_promotion_system()
 
 def implement_promotion_system():
-    """Guia para implementar o sistema de promoção"""
-    print()
-    print("📋 PARA IMPLEMENTAR O SISTEMA DE PROMOÇÃO:")
-    print("1. Adicione as rotas de promote/demote no app.py")
-    print("2. Atualize o admin.js com os novos botões")
-    print("3. Faça deploy no Render")
-    print("4. Execute este script novamente")
-    print()
-    print("🔗 Documentação das rotas:")
-    print("   PUT /api/admin/users/<id>/promote")
-    print("   PUT /api/admin/users/<id>/demote")
+    print("""
+📋 PARA IMPLEMENTAR O SISTEMA DE PROMOÇÃO:
 
-if __name__ == '__main__':
-    add_admin_complete()
+1. Adicione as seguintes rotas no arquivo app.py:
+
+@app.route('/api/admin/users/<int:user_id>/promote', methods=['PUT'])
+@admin_required
+def promote_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        if user.id == session['user_id']:
+            return jsonify({"error": "Não é possível modificar sua própria conta"}), 400
+        
+        user.is_admin = True
+        db.session.commit()
+        
+        return jsonify({"message": "Usuário promovido a administrador com sucesso", "user": user.to_dict()})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao promover usuário: {str(e)}"}), 400
+
+@app.route('/api/admin/users/<int:user_id>/demote', methods=['PUT'])
+@admin_required
+def demote_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        if user.id == session['user_id']:
+            return jsonify({"error": "Não é possível modificar sua própria conta"}), 400
+        
+        admin_count = User.query.filter_by(is_admin=True).count()
+        if admin_count <= 1 and user.is_admin:
+            return jsonify({"error": "Não é possível remover o último administrador"}), 400
+        
+        user.is_admin = False
+        db.session.commit()
+        
+        return jsonify({"message": "Administrador rebaixado a usuário comum com sucesso", "user": user.to_dict()})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao rebaixar usuário: {str(e)}"}), 400
+
+2. Atualize o admin.js com as funções promoteUser() e demoteUser()
+
+3. Faça deploy no Render
+4. Execute este script novamente
+
+🔗 Rotas implementadas:
+   PUT /api/admin/users/<id>/promote
+   PUT /api/admin/users/<id>/demote
+""")
+
+if __name__ == "__main__":
+    add_admin_now()
