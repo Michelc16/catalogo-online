@@ -4,7 +4,7 @@ const API_BASE = window.location.origin + '/api';
 // Verificar autenticação
 async function checkAuth() {
     try {
-        const response = await fetch(`${API_BASE}/user`, {
+        const response = await fetch(`${API_BASE}/admin/users`, {
             credentials: 'include'  // 🔥 IMPORTANTE para cookies
         });
         
@@ -676,10 +676,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     const isAuthenticated = await checkAuth();
     
     if (isAuthenticated) {
-        await loadCurrentUser();
+        await loadCurrentUser();   // 🔥 garante que currentUser está setado
         await showSection('dashboard');
         
-        // Atualizar nome do usuário
         document.getElementById('current-username').textContent = currentUser.username;
     }
 });
