@@ -456,11 +456,6 @@ def setup_database():
         except Exception as e:
             print(f"❌ Erro durante inicialização do banco: {e}")
 
-# 🔥 INICIALIZAÇÃO CORRIGIDA PARA RENDER
-@app.before_first_request
-def initialize_database():
-    setup_database()
-
 # Inicialização quando o app inicia
 with app.app_context():
     try:
