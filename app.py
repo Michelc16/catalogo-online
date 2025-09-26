@@ -199,6 +199,79 @@ def get_current_user():
     
     return jsonify({"user": user.to_dict()})
 
+@app.route('/api/admin/invite', methods=['POST'])
+@admin_required
+def invite_admin():
+    """Convidar novo administrador"""
+    try:
+        data = request.json
+        if not data or 'email' not in data or 'username' not in data:
+            return jsonify({"error": "Email e username são obrigatórios"}), 400
+        
+        # Verificar se usuário já existe
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({"error": "Email já cadastrado"}), 400
+        
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({"error": "Username já existe"}), 400
+        
+        # Criar usuário como admin
+        user = User(
+            username=data['username'],
+            email=data['email'],
+            is_admin=True,
+            invited_by=session['user_id']
+        )
+        # Password temporária
+        temporary_password = secrets.token_urlsafe(8)
+        user.set_password(temporary_password)
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Administrador convidado com sucesso",
+            "temporary_password": temporary_password,  # Em produção, enviar por email
+            "user": user.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao convidar admin: {str(e)}"}), 400
+
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def list_users():
+    """Listar todos os usuários"""
+    try:
+        users = User.query.all()
+        return jsonify([user.to_dict() for user in users])
+    except Exception as e:
+        return jsonify({"error": f"Erro ao listar usuários: {str(e)}"}), 500
+
+@app.route('/api/admin/users/<int:user_id>/toggle', methods=['PUT'])
+@admin_required
+def toggle_user(user_id):
+    """Ativar/desativar usuário"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        # Não permitir desativar a si mesmo
+        if user.id == session['user_id']:
+            return jsonify({"error": "Não é possível desativar sua própria conta"}), 400
+        
+        user.is_active = not user.is_active
+        db.session.commit()
+        
+        action = "ativado" if user.is_active else "desativado"
+        return jsonify({"message": f"Usuário {action} com sucesso", "user": user.to_dict()})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao alterar usuário: {str(e)}"}), 400
+
 # ===== ROTAS PROTEGIDAS =====
 @app.route('/admin')
 def admin_page():
@@ -323,37 +396,31 @@ def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # ===== INICIALIZAÇÃO =====
+def setup_database():
+    """Configura o banco preservando dados existentes"""
+    with app.app_context():
+        db.create_all()
+        print("✅ Banco de dados inicializado!")
+        
+        # Criar usuário admin padrão se não existir
+        if User.query.count() == 0:
+            admin_user = User(
+                username="admin",
+                email="admin@catalogo.com",
+                is_admin=True
+            )
+            admin_user.set_password("admin123")
+            db.session.add(admin_user)
+            db.session.commit()
+            print("👤 Usuário admin criado: admin / admin123")
+
 with app.app_context():
-    db.create_all()
+    setup_database()
     print("✅ Sistema de Catálogo Online com Autenticação inicializado!")
     print(f"🌐 Modo: {'Produção' if os.environ.get('RENDER') else 'Desenvolvimento'}")
     print(f"🔐 Login: http://localhost:5000/login")
     print(f"📊 Dashboard: http://localhost:5000/admin")
     print(f"🛍️  Catálogo: http://localhost:5000/")
-
-def setup_database():
-    """Configura o banco preservando dados existentes"""
-    with app.app_context():
-        # Verificar se a tabela product existe
-        inspector = db.inspect(db.engine)
-        existing_tables = inspector.get_table_names()
-        
-        if 'product' in existing_tables:
-            print("✅ Tabela de produtos já existe - dados preservados")
-            
-            # Verificar se precisa adicionar novas colunas
-            try:
-                # Tentar adicionar coluna se não existir (para futuras atualizações)
-                db.engine.execute('ALTER TABLE product ADD COLUMN IF NOT EXISTS new_column TEXT')
-            except:
-                print("ℹ️  Estrutura da tabela está atualizada")
-        else:
-            print("📋 Criando novas tabelas...")
-            db.create_all()
-        
-        # Criar tabela de usuários se não existir
-        if 'user' not in existing_tables:
-            setup_database()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
