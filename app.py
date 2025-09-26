@@ -203,6 +203,50 @@ def get_current_user():
     
     return jsonify({"user": user.to_dict()})
 
+# ===== ROTAS DE PERFIL =====
+@app.route('/api/profile', methods=['GET'])
+@login_required
+def get_profile():
+    """Obter dados do perfil do usuário logado"""
+    try:
+        user = User.query.get(session['user_id'])
+        return jsonify({"user": user.to_dict()})
+    except Exception as e:
+        return jsonify({"error": f"Erro ao buscar perfil: {str(e)}"}), 500
+
+@app.route('/api/profile', methods=['PUT'])
+@login_required
+def update_profile():
+    """Atualizar perfil do usuário logado"""
+    try:
+        data = request.json
+        user = User.query.get(session['user_id'])
+        
+        if 'email' in data:
+            # Verificar se email já existe (exceto para o próprio usuário)
+            existing_user = User.query.filter(User.email == data['email'], User.id != user.id).first()
+            if existing_user:
+                return jsonify({"error": "Email já está em uso"}), 400
+            user.email = data['email']
+        
+        if 'username' in data:
+            # Verificar se username já existe (exceto para o próprio usuário)
+            existing_user = User.query.filter(User.username == data['username'], User.id != user.id).first()
+            if existing_user:
+                return jsonify({"error": "Username já está em uso"}), 400
+            user.username = data['username']
+        
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+        
+        db.session.commit()
+        return jsonify({"message": "Perfil atualizado com sucesso", "user": user.to_dict()})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao atualizar perfil: {str(e)}"}), 400
+
+# ===== ROTAS DE ADMIN =====
 @app.route('/api/admin/invite', methods=['POST'])
 @admin_required
 def invite_admin():
@@ -235,7 +279,7 @@ def invite_admin():
         
         return jsonify({
             "message": "Administrador convidado com sucesso",
-            "temporary_password": temporary_password,  # Em produção, enviar por email
+            "temporary_password": temporary_password,
             "user": user.to_dict()
         }), 201
         
@@ -324,6 +368,33 @@ def demote_user(user_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Erro ao rebaixar usuário: {str(e)}"}), 400
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    """Excluir usuário"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        # Não permitir excluir a si mesmo
+        if user.id == session['user_id']:
+            return jsonify({"error": "Não é possível excluir sua própria conta"}), 400
+        
+        # Verificar se é o último admin
+        admin_count = User.query.filter_by(is_admin=True).count()
+        if admin_count <= 1 and user.is_admin:
+            return jsonify({"error": "Não é possível excluir o último administrador"}), 400
+        
+        db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({"message": "Usuário excluído com sucesso"})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Erro ao excluir usuário: {str(e)}"}), 400
 
 # ===== ROTAS PROTEGIDAS =====
 @app.route('/admin')
