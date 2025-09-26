@@ -1,11 +1,15 @@
 // Configuração da API
 const API_BASE = window.location.origin + '/api';
 
-// Verificar autenticação
+// Usuário atual
+let currentUser = { id: 0 };
+
+// Verificar autenticação CORRIGIDA
 async function checkAuth() {
     try {
-        const response = await fetch(`${API_BASE}/admin/users`, {
-            credentials: 'include'  // 🔥 IMPORTANTE para cookies
+        const response = await fetch(`${API_BASE}/user`, {
+            credentials: 'include',
+            method: 'GET'
         });
         
         if (!response.ok) {
@@ -14,10 +18,20 @@ async function checkAuth() {
         
         const data = await response.json();
         
-        if (!data.user || !data.user.is_admin) {
+        if (!data.user) {
             window.location.href = '/login';
             return false;
         }
+        
+        if (!data.user.is_admin) {
+            showMessage('Acesso permitido apenas para administradores', 'error');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+            return false;
+        }
+        
+        currentUser = data.user;
         return true;
     } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
@@ -25,11 +39,39 @@ async function checkAuth() {
         return false;
     }
 }
+
+// Carregar usuário atual
+async function loadCurrentUser() {
+    try {
+        const response = await fetch(`${API_BASE}/user`, {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.user) {
+                currentUser = data.user;
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar usuário atual:', error);
+    }
+}
+
 // Gerenciar usuários
 async function loadUsers() {
     try {
-        const response = await fetch(`${API_BASE}/admin/users`);
-        if (!response.ok) throw new Error('Erro ao carregar usuários');
+        const response = await fetch(`${API_BASE}/admin/users`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            throw new Error('Erro ao carregar usuários');
+        }
         
         const users = await response.json();
         displayUsers(users);
@@ -94,7 +136,8 @@ async function promoteUser(userId) {
     
     try {
         const response = await fetch(`${API_BASE}/admin/users/${userId}/promote`, {
-            method: 'PUT'
+            method: 'PUT',
+            credentials: 'include'
         });
         
         const result = await response.json();
@@ -116,7 +159,8 @@ async function demoteUser(userId) {
     
     try {
         const response = await fetch(`${API_BASE}/admin/users/${userId}/demote`, {
-            method: 'PUT'
+            method: 'PUT',
+            credentials: 'include'
         });
         
         const result = await response.json();
@@ -131,46 +175,6 @@ async function demoteUser(userId) {
         showMessage('Erro: ' + error.message, 'error');
     }
 }
-
-// Convidar admin
-document.getElementById('invite-admin-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const button = this.querySelector('button');
-    const originalText = button.innerHTML;
-    
-    try {
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
-        button.disabled = true;
-        
-        const formData = {
-            username: document.getElementById('invite-username').value.trim(),
-            email: document.getElementById('invite-email').value.trim()
-        };
-        
-        const response = await fetch(`${API_BASE}/admin/invite`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData)
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage(`Convite enviado! Senha temporária: <strong>${result.temporary_password}</strong> - Compartilhe com segurança!`, 'success');
-            this.reset();
-            loadUsers();
-        } else {
-            throw new Error(result.error);
-        }
-        
-    } catch (error) {
-        showMessage('Erro: ' + error.message, 'error');
-    } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    }
-});
 
 // Ativar/desativar usuário
 async function toggleUser(userId) {
@@ -178,7 +182,8 @@ async function toggleUser(userId) {
     
     try {
         const response = await fetch(`${API_BASE}/admin/users/${userId}/toggle`, {
-            method: 'PUT'
+            method: 'PUT',
+            credentials: 'include'
         });
         
         const result = await response.json();
@@ -194,26 +199,13 @@ async function toggleUser(userId) {
     }
 }
 
-// Usuário atual
-let currentUser = { id: 0 };
-
-// Carregar usuário atual
-async function loadCurrentUser() {
-    try {
-        const response = await fetch(`${API_BASE}/user`);
-        const data = await response.json();
-        if (data.user) {
-            currentUser = data.user;
-        }
-    } catch (error) {
-        console.error('Erro ao carregar usuário:', error);
-    }
-}
-
 // Logout
 async function logout() {
     try {
-        await fetch(`${API_BASE}/logout`, { method: 'POST' });
+        await fetch(`${API_BASE}/logout`, { 
+            method: 'POST',
+            credentials: 'include'
+        });
         window.location.href = '/login';
     } catch (error) {
         console.error('Erro no logout:', error);
@@ -251,29 +243,73 @@ async function showSection(sectionName) {
     
     // Carregar dados se necessário
     if (sectionName === 'products') {
-        loadProductsTable();
+        await loadProductsTable();
     } else if (sectionName === 'users') {
         await loadUsers();
+    } else if (sectionName === 'dashboard') {
+        await loadDashboardStats();
     }
 }
 
-// Adicione esta função para verificar o status do sistema:
+// Função para carregar estatísticas do dashboard
+async function loadDashboardStats() {
+    try {
+        const response = await fetch(`${API_BASE}/products`);
+        const products = await response.json();
+        
+        const totalProducts = products.length;
+        const categories = [...new Set(products.map(p => p.category).filter(c => c))];
+        const productsWithImages = products.filter(p => p.image_url).length;
+        const avgPrice = products.length > 0 
+            ? products.reduce((sum, p) => sum + p.price, 0) / products.length 
+            : 0;
+
+        // Atualizar elementos
+        document.getElementById('total-products').textContent = totalProducts;
+        document.getElementById('total-categories').textContent = categories.length;
+        document.getElementById('products-with-images').textContent = productsWithImages;
+        document.getElementById('avg-price').textContent = 'R$ ' + avgPrice.toFixed(2);
+        
+    } catch (error) {
+        console.error('Erro ao carregar estatísticas:', error);
+    }
+}
+
+// Função para verificar status do sistema
 async function checkSystemStatus() {
     try {
-        const response = await fetch(`${API_BASE}/health`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/health`);
         const data = await response.json();
         
         const statusDiv = document.getElementById('system-status');
-        if (data.status === 'OK') {
-            statusDiv.innerHTML = '<small class="text-success"><i class="fas fa-check-circle"></i> Sistema Online</small>';
-        } else {
-            statusDiv.innerHTML = '<small class="text-danger"><i class="fas fa-exclamation-triangle"></i> Sistema com problemas</small>';
+        if (statusDiv) {
+            if (data.status === 'OK') {
+                statusDiv.innerHTML = '<small class="text-success"><i class="fas fa-check-circle"></i> Sistema Online</small>';
+            } else {
+                statusDiv.innerHTML = '<small class="text-danger"><i class="fas fa-exclamation-triangle"></i> Sistema com problemas</small>';
+            }
         }
+        
+        // Atualizar info do usuário
+        const userResponse = await fetch(`${API_BASE}/user`, { credentials: 'include' });
+        const userData = await userResponse.json();
+        
+        if (userData.user) {
+            const userInfoDiv = document.getElementById('current-user-info');
+            if (userInfoDiv) {
+                userInfoDiv.innerHTML = `
+                    <strong>${userData.user.username}</strong><br>
+                    <small>${userData.user.is_admin ? 'Administrador' : 'Usuário'}</small>
+                `;
+            }
+        }
+        
     } catch (error) {
-        document.getElementById('system-status').innerHTML = 
-            '<small class="text-danger"><i class="fas fa-times-circle"></i> Erro de conexão</small>';
+        const statusDiv = document.getElementById('system-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = 
+                '<small class="text-danger"><i class="fas fa-times-circle"></i> Erro de conexão</small>';
+        }
     }
 }
 
@@ -300,37 +336,42 @@ async function loadProductsTable() {
 // Mostrar loading na tabela
 function showTableLoading() {
     const tableBody = document.getElementById('products-table');
-    tableBody.innerHTML = `
-        <tr>
-            <td colspan="7" class="text-center">
-                <div class="spinner-border spinner-border-sm" role="status">
-                    <span class="visually-hidden">Carregando...</span>
-                </div>
-                Carregando produtos...
-            </td>
-        </tr>
-    `;
+    if (tableBody) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                    Carregando produtos...
+                </td>
+            </tr>
+        `;
+    }
 }
 
 // Mostrar erro na tabela
 function showTableError(message) {
     const tableBody = document.getElementById('products-table');
-    tableBody.innerHTML = `
-        <tr>
-            <td colspan="7" class="text-center text-danger">
-                <i class="fas fa-exclamation-triangle"></i> Erro ao carregar produtos: ${message}
-                <br><small>Verifique se a API está respondendo</small>
-                <br><button class="btn btn-sm btn-primary mt-2" onclick="loadProductsTable()">
-                    <i class="fas fa-redo"></i> Tentar Novamente
-                </button>
-            </td>
-        </tr>
-    `;
+    if (tableBody) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Erro ao carregar produtos: ${message}
+                    <br><small>Verifique se a API está respondendo</small>
+                    <br><button class="btn btn-sm btn-primary mt-2" onclick="loadProductsTable()">
+                        <i class="fas fa-redo"></i> Tentar Novamente
+                    </button>
+                </td>
+            </tr>
+        `;
+    }
 }
 
 // Exibir produtos na tabela
 function displayProductsTable(products) {
     const tableBody = document.getElementById('products-table');
+    if (!tableBody) return;
     
     if (products.length === 0) {
         tableBody.innerHTML = `
@@ -344,8 +385,15 @@ function displayProductsTable(products) {
         `;
         
         // Esconder estatísticas se não há produtos
-        document.getElementById('stats-section').style.display = 'none';
-        document.getElementById('products-count').textContent = '0 produtos';
+        const statsSection = document.getElementById('stats-section');
+        if (statsSection) {
+            statsSection.style.display = 'none';
+        }
+        
+        const productsCount = document.getElementById('products-count');
+        if (productsCount) {
+            productsCount.textContent = '0 produtos';
+        }
         return;
     }
     
@@ -406,132 +454,24 @@ function calculateStats(products) {
         : 0;
 
     // Atualizar elementos
-    document.getElementById('total-products').textContent = totalProducts;
-    document.getElementById('total-categories').textContent = categories.length;
-    document.getElementById('products-with-images').textContent = productsWithImages;
-    document.getElementById('avg-price').textContent = 'R$ ' + avgPrice.toFixed(2);
-    document.getElementById('products-count').textContent = totalProducts + ' produtos';
+    const totalProductsEl = document.getElementById('total-products');
+    const totalCategoriesEl = document.getElementById('total-categories');
+    const productsWithImagesEl = document.getElementById('products-with-images');
+    const avgPriceEl = document.getElementById('avg-price');
+    const productsCountEl = document.getElementById('products-count');
+    const statsSection = document.getElementById('stats-section');
+    
+    if (totalProductsEl) totalProductsEl.textContent = totalProducts;
+    if (totalCategoriesEl) totalCategoriesEl.textContent = categories.length;
+    if (productsWithImagesEl) productsWithImagesEl.textContent = productsWithImages;
+    if (avgPriceEl) avgPriceEl.textContent = 'R$ ' + avgPrice.toFixed(2);
+    if (productsCountEl) productsCountEl.textContent = totalProducts + ' produtos';
     
     // Mostrar seção de estatísticas
-    document.getElementById('stats-section').style.display = 'flex';
+    if (statsSection) {
+        statsSection.style.display = 'flex';
+    }
 }
-
-// Adicionar novo produto
-document.getElementById('add-product-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const submitButton = this.querySelector('button[type="submit"]');
-    const originalText = submitButton.innerHTML;
-    
-    try {
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adicionando...';
-        submitButton.disabled = true;
-        
-        const productData = {
-            name: document.getElementById('product-name').value.trim(),
-            description: document.getElementById('product-description').value.trim(),
-            price: parseFloat(document.getElementById('product-price').value),
-            category: document.getElementById('product-category').value.trim(),
-            image_url: ''
-        };
-        
-        // Validar dados
-        if (!productData.name || !productData.price) {
-            throw new Error('Nome e preço são obrigatórios');
-        }
-        
-        const imageFile = document.getElementById('product-image').files[0];
-        
-        // Upload de imagem se existir
-        if (imageFile) {
-            const formData = new FormData();
-            formData.append('file', imageFile);
-            
-            const uploadResponse = await fetch(`${API_BASE}/upload`, {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (!uploadResponse.ok) {
-                const error = await uploadResponse.json();
-                throw new Error(error.error || 'Erro no upload da imagem');
-            }
-            
-            const uploadResult = await uploadResponse.json();
-            productData.image_url = uploadResult.filename;
-        }
-        
-        // Criar produto
-        const response = await fetch(`${API_BASE}/products`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(productData)
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erro ao adicionar produto');
-        }
-        
-        showMessage('Produto adicionado com sucesso!', 'success');
-        document.getElementById('add-product-form').reset();
-        loadProductsTable();
-        showSection('products');
-        
-    } catch (error) {
-        console.error('Erro:', error);
-        showMessage('Erro ao adicionar produto: ' + error.message, 'error');
-    } finally {
-        submitButton.innerHTML = originalText;
-        submitButton.disabled = false;
-    }
-});
-
-// Importar produtos
-document.getElementById('import-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const submitButton = this.querySelector('button[type="submit"]');
-    const originalText = submitButton.innerHTML;
-    
-    try {
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando...';
-        submitButton.disabled = true;
-        
-        const file = document.getElementById('import-file').files[0];
-        if (!file) {
-            throw new Error('Selecione um arquivo CSV');
-        }
-        
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch(`${API_BASE}/upload`, {
-            method: 'POST',
-            body: formData
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showMessage(result.message, 'success');
-            document.getElementById('import-form').reset();
-            loadProductsTable();
-            showSection('products');
-        } else {
-            throw new Error(result.error || 'Erro ao importar produtos');
-        }
-        
-    } catch (error) {
-        console.error('Erro:', error);
-        showMessage('Erro ao importar produtos: ' + error.message, 'error');
-    } finally {
-        submitButton.innerHTML = originalText;
-        submitButton.disabled = false;
-    }
-});
 
 // Editar produto
 async function editProduct(productId) {
@@ -587,6 +527,7 @@ async function updateProduct() {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify(productData)
         });
         
@@ -617,13 +558,10 @@ function confirmDelete(productId, productName) {
 
 // Excluir produto
 async function deleteProduct(productId) {
-    if (!confirm('Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita.')) {
-        return;
-    }
-    
     try {
         const response = await fetch(`${API_BASE}/products/${productId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'
         });
         
         if (!response.ok) {
@@ -642,7 +580,11 @@ async function deleteProduct(productId) {
 
 // Mostrar mensagens
 function showMessage(message, type = 'info') {
-    const messageDiv = document.getElementById('message');
+    // Remover mensagens existentes
+    const existingMessages = document.querySelectorAll('.alert');
+    existingMessages.forEach(alert => alert.remove());
+    
+    const messageDiv = document.createElement('div');
     messageDiv.innerHTML = `
         <div class="alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show" role="alert">
             ${message}
@@ -652,8 +594,9 @@ function showMessage(message, type = 'info') {
     
     // Adicionar no topo do main content
     const mainContent = document.querySelector('.main-content');
-    const firstSection = mainContent.querySelector('.section');
-    mainContent.insertBefore(messageDiv, firstSection);
+    if (mainContent) {
+        mainContent.insertBefore(messageDiv, mainContent.firstChild);
+    }
     
     // Auto-remover após 5 segundos
     setTimeout(() => {
@@ -666,19 +609,166 @@ function showMessage(message, type = 'info') {
 
 // Função auxiliar para escapar HTML
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// Inicialização
+// Event Listeners
 document.addEventListener('DOMContentLoaded', async function() {
+    // Verificar autenticação primeiro
     const isAuthenticated = await checkAuth();
     
     if (isAuthenticated) {
-        await loadCurrentUser();   // 🔥 garante que currentUser está setado
+        await loadCurrentUser();
         await showSection('dashboard');
+        await checkSystemStatus();
         
-        document.getElementById('current-username').textContent = currentUser.username;
+        // Adicionar evento ao formulário de produto se existir
+        const addProductForm = document.getElementById('add-product-form');
+        if (addProductForm) {
+            addProductForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const submitButton = this.querySelector('button[type="submit"]');
+                const originalText = submitButton.innerHTML;
+                
+                try {
+                    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adicionando...';
+                    submitButton.disabled = true;
+                    
+                    const productData = {
+                        name: document.getElementById('product-name').value.trim(),
+                        description: document.getElementById('product-description').value.trim(),
+                        price: parseFloat(document.getElementById('product-price').value),
+                        category: document.getElementById('product-category').value.trim(),
+                        image_url: document.getElementById('product-image-url').value.trim()
+                    };
+                    
+                    // Validar dados
+                    if (!productData.name || !productData.price) {
+                        throw new Error('Nome e preço são obrigatórios');
+                    }
+                    
+                    const response = await fetch(`${API_BASE}/products`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify(productData)
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Erro ao adicionar produto');
+                    }
+                    
+                    showMessage('Produto adicionado com sucesso!', 'success');
+                    this.reset();
+                    loadProductsTable();
+                    
+                } catch (error) {
+                    console.error('Erro:', error);
+                    showMessage('Erro ao adicionar produto: ' + error.message, 'error');
+                } finally {
+                    submitButton.innerHTML = originalText;
+                    submitButton.disabled = false;
+                }
+            });
+        }
+        
+        // Adicionar evento ao formulário de convite de admin
+        const inviteAdminForm = document.getElementById('invite-admin-form');
+        if (inviteAdminForm) {
+            inviteAdminForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const button = this.querySelector('button');
+                const originalText = button.innerHTML;
+                
+                try {
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+                    button.disabled = true;
+                    
+                    const formData = {
+                        username: document.getElementById('invite-username').value.trim(),
+                        email: document.getElementById('invite-email').value.trim()
+                    };
+                    
+                    const response = await fetch(`${API_BASE}/admin/invite`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showMessage(`Convite enviado! Senha temporária: <strong>${result.temporary_password}</strong> - Compartilhe com segurança!`, 'success');
+                        this.reset();
+                        loadUsers();
+                    } else {
+                        throw new Error(result.error);
+                    }
+                    
+                } catch (error) {
+                    showMessage('Erro: ' + error.message, 'error');
+                } finally {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            });
+        }
+        
+        // Adicionar evento ao formulário de importação
+        const importForm = document.getElementById('import-form');
+        if (importForm) {
+            importForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const submitButton = this.querySelector('button[type="submit"]');
+                const originalText = submitButton.innerHTML;
+                
+                try {
+                    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando...';
+                    submitButton.disabled = true;
+                    
+                    const file = document.getElementById('import-file').files[0];
+                    if (!file) {
+                        throw new Error('Selecione um arquivo CSV');
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    const response = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showMessage(result.message, 'success');
+                        document.getElementById('import-form').reset();
+                        loadProductsTable();
+                        showSection('products');
+                    } else {
+                        throw new Error(result.error || 'Erro ao importar produtos');
+                    }
+                    
+                } catch (error) {
+                    console.error('Erro:', error);
+                    showMessage('Erro ao importar produtos: ' + error.message, 'error');
+                } finally {
+                    submitButton.innerHTML = originalText;
+                    submitButton.disabled = false;
+                }
+            });
+        }
     }
 });
