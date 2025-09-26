@@ -17,20 +17,20 @@ app = Flask(__name__,
     static_url_path=''
 )
 
-# Configuração do banco de dados - CORRIGIDA PARA RENDER
-database_url = os.environ.get('DATABASE_URL')
+# 🔥 CONFIGURAÇÃO CORRIGIDA PARA RENDER
+def get_database_uri():
+    # No Render, usa DATABASE_URL do ambiente
+    if 'DATABASE_URL' in os.environ:
+        database_url = os.environ.get('DATABASE_URL', '')
+        # Corrige URL do PostgreSQL se necessário
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
+        return database_url
+    else:
+        # Desenvolvimento local - usa SQLite
+        return f"sqlite:///{os.path.join(basedir, 'catalogo.db')}"
 
-if database_url:
-    # Corrige URLs inválidas que venham do Render
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-    if database_url.startswith("https://"):
-        database_url = database_url.replace("https://", "postgresql://", 1)
-
-    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-else:
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'catalogo.db')}"
-
+app.config["SQLALCHEMY_DATABASE_URI"] = get_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(basedir, 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -527,31 +527,32 @@ def uploaded_file(filename):
 def setup_database():
     """Configura o banco preservando dados existentes"""
     with app.app_context():
-        db.create_all()
-        print("✅ Banco de dados inicializado!")
-        
-        # Criar usuário admin padrão se não existir
-        if User.query.count() == 0:
-            admin_user = User(
-                username="admin",
-                email="admin@catalogo.com",
-                is_admin=True
-            )
-            admin_user.set_password("admin123")
-            db.session.add(admin_user)
-            db.session.commit()
-            print("👤 Usuário admin criado: admin / admin123")
+        try:
+            db.create_all()
+            print("✅ Banco de dados inicializado!")
+            
+            # Criar usuário admin padrão se não existir
+            if User.query.count() == 0:
+                admin_user = User(
+                    username="admin",
+                    email="admin@catalogo.com",
+                    is_admin=True
+                )
+                admin_user.set_password("admin123")
+                db.session.add(admin_user)
+                db.session.commit()
+                print("👤 Usuário admin criado: admin / admin123")
+        except Exception as e:
+            print(f"⚠️ Aviso durante inicialização do banco: {e}")
 
-# Inicialização
+# 🔥 INICIALIZAÇÃO CORRIGIDA PARA RENDER
+# A inicialização do banco agora acontece quando a aplicação inicia
 with app.app_context():
     setup_database()
-    print("✅ Sistema de Catálogo Online com Autenticação inicializado!")
-    print(f"🌐 Modo: {'Produção' if os.environ.get('RENDER') else 'Desenvolvimento'}")
-    print(f"🔐 Login: http://localhost:5000/login")
-    print(f"📊 Dashboard: http://localhost:5000/admin")
-    print(f"🛍️  Catálogo: http://localhost:5000/")
 
+# ⚠️ IMPORTANTE: No Render, o Gunicorn chama a app diretamente
+# Não use app.run() em produção no Render
 if __name__ == "__main__":
+    # Isso só executa localmente
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
-
+    app.run(host="0.0.0.0", port=port, debug=False)
