@@ -19,16 +19,20 @@ app = Flask(__name__,
 
 # 🔥 CONFIGURAÇÃO CORRIGIDA PARA RENDER
 def get_database_uri():
-    # No Render, usa DATABASE_URL do ambiente
-    if 'DATABASE_URL' in os.environ:
-        database_url = os.environ.get('DATABASE_URL', '')
-        # Corrige URL do PostgreSQL se necessário
+    database_url = os.environ.get('DATABASE_URL', '')
+    
+    print(f"🔍 DATABASE_URL encontrada: {database_url}")  # Debug
+    
+    if database_url:
+        # Corrige postgres:// para postgresql://
         if database_url.startswith("postgres://"):
             database_url = database_url.replace("postgres://", "postgresql://", 1)
         return database_url
     else:
-        # Desenvolvimento local - usa SQLite
-        return f"sqlite:///{os.path.join(basedir, 'catalogo.db')}"
+        # Fallback para SQLite
+        sqlite_path = f"sqlite:///{os.path.join(basedir, 'catalogo.db')}"
+        print(f"🔍 Usando SQLite: {sqlite_path}")
+        return sqlite_path
 
 app.config["SQLALCHEMY_DATABASE_URI"] = get_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -37,12 +41,18 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'sua-chave-secreta-muito-longa-aqui-12345')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
+# 🔥 CORS CONFIGURADO CORRETAMENTE
+CORS(app, supports_credentials=True, origins=[
+    "https://catalogo-online-0196.onrender.com",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000"
+])
+
 # Criar diretórios necessários
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('static/images', exist_ok=True)
 
 db.init_app(app)
-CORS(app)
 
 # ===== MIDDLEWARES =====
 def login_required(f):
@@ -128,7 +138,7 @@ def register_page():
 @app.route('/api/register', methods=['POST'])
 def register():
     try:
-        data = request.json
+        data = request.get_json()
         if not data or 'username' not in data or 'email' not in data or 'password' not in data:
             return jsonify({"error": "Username, email e password são obrigatórios"}), 400
         
@@ -144,7 +154,7 @@ def register():
         user = User(
             username=data['username'],
             email=data['email'],
-            is_admin=is_first_user  # Primeiro usuário vira admin
+            is_admin=is_first_user
         )
         user.set_password(data['password'])
         
@@ -169,7 +179,7 @@ def register():
 @app.route('/api/login', methods=['POST'])
 def login():
     try:
-        data = request.json
+        data = request.get_json()
         if not data or 'username' not in data or 'password' not in data:
             return jsonify({"error": "Username e password são obrigatórios"}), 400
         
@@ -211,7 +221,6 @@ def get_current_user():
 @app.route('/api/profile', methods=['GET'])
 @login_required
 def get_profile():
-    """Obter dados do perfil do usuário logado"""
     try:
         user = User.query.get(session['user_id'])
         return jsonify({"user": user.to_dict()})
@@ -221,20 +230,17 @@ def get_profile():
 @app.route('/api/profile', methods=['PUT'])
 @login_required
 def update_profile():
-    """Atualizar perfil do usuário logado"""
     try:
-        data = request.json
+        data = request.get_json()
         user = User.query.get(session['user_id'])
         
         if 'email' in data:
-            # Verificar se email já existe (exceto para o próprio usuário)
             existing_user = User.query.filter(User.email == data['email'], User.id != user.id).first()
             if existing_user:
                 return jsonify({"error": "Email já está em uso"}), 400
             user.email = data['email']
         
         if 'username' in data:
-            # Verificar se username já existe (exceto para o próprio usuário)
             existing_user = User.query.filter(User.username == data['username'], User.id != user.id).first()
             if existing_user:
                 return jsonify({"error": "Username já está em uso"}), 400
@@ -254,27 +260,23 @@ def update_profile():
 @app.route('/api/admin/invite', methods=['POST'])
 @admin_required
 def invite_admin():
-    """Convidar novo administrador"""
     try:
-        data = request.json
+        data = request.get_json()
         if not data or 'email' not in data or 'username' not in data:
             return jsonify({"error": "Email e username são obrigatórios"}), 400
         
-        # Verificar se usuário já existe
         if User.query.filter_by(email=data['email']).first():
             return jsonify({"error": "Email já cadastrado"}), 400
         
         if User.query.filter_by(username=data['username']).first():
             return jsonify({"error": "Username já existe"}), 400
         
-        # Criar usuário como admin
         user = User(
             username=data['username'],
             email=data['email'],
             is_admin=True,
             invited_by=session['user_id']
         )
-        # Password temporária
         temporary_password = secrets.token_urlsafe(8)
         user.set_password(temporary_password)
         
@@ -294,111 +296,11 @@ def invite_admin():
 @app.route('/api/admin/users', methods=['GET'])
 @admin_required
 def list_users():
-    """Listar todos os usuários"""
     try:
         users = User.query.all()
         return jsonify([user.to_dict() for user in users])
     except Exception as e:
         return jsonify({"error": f"Erro ao listar usuários: {str(e)}"}), 500
-
-@app.route('/api/admin/users/<int:user_id>/toggle', methods=['PUT'])
-@admin_required
-def toggle_user(user_id):
-    """Ativar/desativar usuário"""
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({"error": "Usuário não encontrado"}), 404
-        
-        # Não permitir desativar a si mesmo
-        if user.id == session['user_id']:
-            return jsonify({"error": "Não é possível desativar sua própria conta"}), 400
-        
-        user.is_active = not user.is_active
-        db.session.commit()
-        
-        action = "ativado" if user.is_active else "desativado"
-        return jsonify({"message": f"Usuário {action} com sucesso", "user": user.to_dict()})
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"Erro ao alterar usuário: {str(e)}"}), 400
-
-@app.route('/api/admin/users/<int:user_id>/promote', methods=['PUT'])
-@admin_required
-def promote_user(user_id):
-    """Promover usuário para admin"""
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({"error": "Usuário não encontrado"}), 404
-        
-        # Não permitir modificar a si mesmo
-        if user.id == session['user_id']:
-            return jsonify({"error": "Não é possível modificar sua própria conta"}), 400
-        
-        user.is_admin = True
-        db.session.commit()
-        
-        return jsonify({"message": "Usuário promovido a administrador com sucesso", "user": user.to_dict()})
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"Erro ao promover usuário: {str(e)}"}), 400
-
-@app.route('/api/admin/users/<int:user_id>/demote', methods=['PUT'])
-@admin_required
-def demote_user(user_id):
-    """Rebaixar admin para usuário normal"""
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({"error": "Usuário não encontrado"}), 404
-        
-        # Não permitir modificar a si mesmo
-        if user.id == session['user_id']:
-            return jsonify({"error": "Não é possível modificar sua própria conta"}), 400
-        
-        # Verificar se é o último admin
-        admin_count = User.query.filter_by(is_admin=True).count()
-        if admin_count <= 1 and user.is_admin:
-            return jsonify({"error": "Não é possível remover o último administrador"}), 400
-        
-        user.is_admin = False
-        db.session.commit()
-        
-        return jsonify({"message": "Administrador rebaixado a usuário comum com sucesso", "user": user.to_dict()})
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"Erro ao rebaixar usuário: {str(e)}"}), 400
-
-@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
-@admin_required
-def delete_user(user_id):
-    """Excluir usuário"""
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({"error": "Usuário não encontrado"}), 404
-        
-        # Não permitir excluir a si mesmo
-        if user.id == session['user_id']:
-            return jsonify({"error": "Não é possível excluir sua própria conta"}), 400
-        
-        # Verificar se é o último admin
-        admin_count = User.query.filter_by(is_admin=True).count()
-        if admin_count <= 1 and user.is_admin:
-            return jsonify({"error": "Não é possível excluir o último administrador"}), 400
-        
-        db.session.delete(user)
-        db.session.commit()
-        
-        return jsonify({"message": "Usuário excluído com sucesso"})
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"Erro ao excluir usuário: {str(e)}"}), 400
 
 # ===== ROTAS PROTEGIDAS =====
 @app.route('/admin')
@@ -425,7 +327,7 @@ def get_products():
 @admin_required
 def create_product():
     try:
-        data = request.json
+        data = request.get_json()
         if not data or 'name' not in data or 'price' not in data:
             return jsonify({"error": "Nome e preço são obrigatórios"}), 400
         
@@ -451,7 +353,7 @@ def update_product(product_id):
         if product is None:
             return jsonify({"error": "Produto não encontrado"}), 404
         
-        data = request.json
+        data = request.get_json()
         product.name = data.get('name', product.name)
         product.description = data.get('description', product.description)
         product.price = float(data.get('price', product.price))
@@ -517,13 +419,17 @@ def get_categories():
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    return jsonify({"status": "OK", "message": "API está funcionando corretamente"})
+    return jsonify({
+        "status": "OK", 
+        "message": "API está funcionando corretamente",
+        "database_connected": True
+    })
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# ===== INICIALIZAÇÃO =====
+# ===== INICIALIZAÇÃO DO BANCO =====
 def setup_database():
     """Configura o banco preservando dados existentes"""
     with app.app_context():
@@ -542,17 +448,26 @@ def setup_database():
                 db.session.add(admin_user)
                 db.session.commit()
                 print("👤 Usuário admin criado: admin / admin123")
+                
+            # Verificar produtos
+            product_count = Product.query.count()
+            print(f"📦 Total de produtos: {product_count}")
+            
         except Exception as e:
-            print(f"⚠️ Aviso durante inicialização do banco: {e}")
+            print(f"❌ Erro durante inicialização do banco: {e}")
 
 # 🔥 INICIALIZAÇÃO CORRIGIDA PARA RENDER
-# A inicialização do banco agora acontece quando a aplicação inicia
-with app.app_context():
+@app.before_first_request
+def initialize_database():
     setup_database()
 
-# ⚠️ IMPORTANTE: No Render, o Gunicorn chama a app diretamente
-# Não use app.run() em produção no Render
+# Inicialização quando o app inicia
+with app.app_context():
+    try:
+        setup_database()
+    except Exception as e:
+        print(f"⚠️ Aviso na inicialização: {e}")
+
 if __name__ == "__main__":
-    # Isso só executa localmente
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

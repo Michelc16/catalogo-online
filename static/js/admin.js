@@ -4,7 +4,14 @@ const API_BASE = window.location.origin + '/api';
 // Verificar autenticação
 async function checkAuth() {
     try {
-        const response = await fetch(`${API_BASE}/user`);
+        const response = await fetch(`${API_BASE}/user`, {
+            credentials: 'include'  // 🔥 IMPORTANTE para cookies
+        });
+        
+        if (!response.ok) {
+            throw new Error('Erro de autenticação');
+        }
+        
         const data = await response.json();
         
         if (!data.user || !data.user.is_admin) {
@@ -18,7 +25,6 @@ async function checkAuth() {
         return false;
     }
 }
-
 // Gerenciar usuários
 async function loadUsers() {
     try {
@@ -240,11 +246,34 @@ async function showSection(sectionName) {
         activeLink.classList.add('active');
     }
     
+    // Verificar status do sistema
+    await checkSystemStatus();
+    
     // Carregar dados se necessário
     if (sectionName === 'products') {
         loadProductsTable();
     } else if (sectionName === 'users') {
         await loadUsers();
+    }
+}
+
+// Adicione esta função para verificar o status do sistema:
+async function checkSystemStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/health`, {
+            credentials: 'include'
+        });
+        const data = await response.json();
+        
+        const statusDiv = document.getElementById('system-status');
+        if (data.status === 'OK') {
+            statusDiv.innerHTML = '<small class="text-success"><i class="fas fa-check-circle"></i> Sistema Online</small>';
+        } else {
+            statusDiv.innerHTML = '<small class="text-danger"><i class="fas fa-exclamation-triangle"></i> Sistema com problemas</small>';
+        }
+    } catch (error) {
+        document.getElementById('system-status').innerHTML = 
+            '<small class="text-danger"><i class="fas fa-times-circle"></i> Erro de conexão</small>';
     }
 }
 
