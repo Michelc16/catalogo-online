@@ -8,6 +8,8 @@ from PIL import Image
 import secrets
 from datetime import timedelta
 import logging
+import urllib.parse
+from sqlalchemy import text
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
@@ -88,7 +90,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return jsonify({"error": "Login requerido"}), 401
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if not user or not user.is_admin:
             return jsonify({"error": "Acesso admin requerido"}), 403
         return f(*args, **kwargs)
@@ -99,6 +101,71 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'csv'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def clean_image_url(image_url):
+    """Limpa a URL da imagem removendo caminhos inválidos como C:/fakepath/"""
+    if not image_url or not isinstance(image_url, str):
+        return ""
+    
+    # Remove caminhos inválidos do navegador
+    if 'fakepath' in image_url.lower():
+        # Extrai apenas o nome do arquivo
+        if '\\' in image_url:
+            filename = image_url.split('\\')[-1]
+        elif '/' in image_url:
+            filename = image_url.split('/')[-1]
+        else:
+            filename = image_url
+        logger.info(f"🔧 URL limpa: {image_url} -> {filename}")
+        return filename
+    elif image_url.startswith('C:/') or image_url.startswith('file:///'):
+        # Remove caminhos absolutos
+        filename = image_url.split('/')[-1]
+        logger.info(f"🔧 URL limpa: {image_url} -> {filename}")
+        return filename
+    
+    return image_url
+
+def check_image_exists(image_url):
+    """Verifica se a imagem existe no diretório de uploads"""
+    if not image_url:
+        return False
+    
+    cleaned_url = clean_image_url(image_url)
+    if not cleaned_url:
+        return False
+    
+    image_path = os.path.join(app.config['UPLOAD_FOLDER'], cleaned_url)
+    return os.path.exists(image_path)
+
+def get_default_image_url():
+    """Retorna URL para imagem padrão quando a imagem não existe"""
+    return "/static/images/default-product.png"
+
+def fix_existing_image_urls():
+    """Corrige URLs de imagens existentes no banco de dados"""
+    try:
+        products = Product.query.all()
+        fixed_count = 0
+        
+        for product in products:
+            if product.image_url:
+                original_url = product.image_url
+                cleaned_url = clean_image_url(original_url)
+                
+                if cleaned_url != original_url:
+                    product.image_url = cleaned_url
+                    fixed_count += 1
+                    logger.info(f"🔄 URL corrigida: {original_url} -> {cleaned_url}")
+        
+        if fixed_count > 0:
+            db.session.commit()
+            logger.info(f"✅ {fixed_count} URLs de imagem corrigidas no banco de dados")
+        
+        return fixed_count
+    except Exception as e:
+        logger.error(f"❌ Erro ao corrigir URLs: {e}")
+        return 0
 
 def validate_product_data(data):
     """Valida dados do produto"""
@@ -162,12 +229,15 @@ def process_csv(file):
                     errors.extend([f"Linha {row_num}: {error}" for error in validation_errors])
                     continue
                 
+                # Limpar URL da imagem se existir
+                image_url = clean_image_url(str(row.get('image_url', '')).strip())
+                
                 product = Product(
                     name=str(row['name']).strip(),
                     description=str(row.get('description', '')).strip(),
                     price=float(row['price']),
                     category=str(row.get('category', '')).strip(),
-                    image_url=str(row.get('image_url', '')).strip()
+                    image_url=image_url
                 )
                 db.session.add(product)
                 products_created += 1
@@ -356,7 +426,7 @@ def get_current_user():
     if 'user_id' not in session:
         return jsonify({"user": None})
     
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     if not user:
         session.clear()
         return jsonify({"user": None})
@@ -373,7 +443,7 @@ def make_session_permanent():
 @login_required
 def get_profile():
     try:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         return jsonify({"user": user.to_dict()})
     except Exception as e:
         logger.error(f"Erro ao buscar perfil: {str(e)}")
@@ -384,7 +454,7 @@ def get_profile():
 def update_profile():
     try:
         data = request.get_json()
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         
         if 'email' in data:
             email = data['email'].strip().lower()
@@ -485,7 +555,7 @@ def list_users():
 @admin_required
 def promote_user(user_id):
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"error": "Usuário não encontrado"}), 404
         
@@ -507,7 +577,7 @@ def promote_user(user_id):
 @admin_required
 def demote_user(user_id):
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"error": "Usuário não encontrado"}), 404
         
@@ -534,7 +604,7 @@ def demote_user(user_id):
 @admin_required
 def toggle_user(user_id):
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"error": "Usuário não encontrado"}), 404
         
@@ -567,7 +637,7 @@ def admin_page():
     if 'user_id' not in session:
         return redirect('/login')
     
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     if not user or not user.is_admin or not user.is_active:
         return redirect('/login')
     
@@ -590,7 +660,28 @@ def get_products():
             query = query.filter(Product.name.contains(search))
         
         products = query.order_by(Product.created_at.desc()).all()
-        return jsonify([product.to_dict() for product in products])
+        
+        # Aplicar clean_image_url em todos os produtos antes de retornar
+        cleaned_products = []
+        for product in products:
+            product_dict = product.to_dict()
+            if product_dict.get('image_url'):
+                # Verificar se a imagem existe
+                if not check_image_exists(product_dict['image_url']):
+                    product_dict['image_exists'] = False
+                    product_dict['image_url_display'] = get_default_image_url()
+                else:
+                    product_dict['image_exists'] = True
+                    product_dict['image_url_display'] = f"/uploads/{clean_image_url(product_dict['image_url'])}"
+                
+                product_dict['image_url'] = clean_image_url(product_dict['image_url'])
+            else:
+                product_dict['image_exists'] = False
+                product_dict['image_url_display'] = get_default_image_url()
+            
+            cleaned_products.append(product_dict)
+        
+        return jsonify(cleaned_products)
         
     except Exception as e:
         logger.error(f"Erro ao buscar produtos: {str(e)}")
@@ -607,19 +698,29 @@ def create_product():
         if validation_errors:
             return jsonify({"error": "; ".join(validation_errors)}), 400
         
+        # Limpar URL da imagem se existir
+        image_url = clean_image_url(data.get('image_url', '').strip())
+        
         product = Product(
             name=data['name'].strip(),
             description=data.get('description', '').strip(),
             price=float(data['price']),
             category=data.get('category', '').strip(),
-            image_url=data.get('image_url', '').strip()
+            image_url=image_url
         )
         
         db.session.add(product)
         db.session.commit()
         
         logger.info(f"Produto criado: {product.name} por {session['username']}")
-        return jsonify(product.to_dict()), 201
+        
+        # Retornar produto com informações de imagem
+        product_dict = product.to_dict()
+        if product_dict.get('image_url'):
+            product_dict['image_exists'] = check_image_exists(product_dict['image_url'])
+            product_dict['image_url_display'] = f"/uploads/{clean_image_url(product_dict['image_url'])}" if product_dict['image_exists'] else get_default_image_url()
+        
+        return jsonify(product_dict), 201
         
     except Exception as e:
         db.session.rollback()
@@ -629,10 +730,21 @@ def create_product():
 @app.route('/api/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
     try:
-        product = Product.query.get(product_id)
+        product = db.session.get(Product, product_id)
         if not product:
             return jsonify({"error": "Produto não encontrado"}), 404
-        return jsonify(product.to_dict())
+        
+        product_dict = product.to_dict()
+        # Aplicar clean_image_url antes de retornar
+        if product_dict.get('image_url'):
+            product_dict['image_url'] = clean_image_url(product_dict['image_url'])
+            product_dict['image_exists'] = check_image_exists(product_dict['image_url'])
+            product_dict['image_url_display'] = f"/uploads/{product_dict['image_url']}" if product_dict['image_exists'] else get_default_image_url()
+        else:
+            product_dict['image_exists'] = False
+            product_dict['image_url_display'] = get_default_image_url()
+        
+        return jsonify(product_dict)
     except Exception as e:
         logger.error(f"Erro ao buscar produto: {str(e)}")
         return jsonify({"error": f"Erro ao buscar produto: {str(e)}"}), 500
@@ -641,7 +753,7 @@ def get_product(product_id):
 @admin_required
 def update_product(product_id):
     try:
-        product = Product.query.get(product_id)
+        product = db.session.get(Product, product_id)
         if not product:
             return jsonify({"error": "Produto não encontrado"}), 404
         
@@ -652,16 +764,30 @@ def update_product(product_id):
         if validation_errors:
             return jsonify({"error": "; ".join(validation_errors)}), 400
         
+        # Limpar URL da imagem se existir
+        image_url = clean_image_url(data.get('image_url', product.image_url).strip())
+        
         product.name = data.get('name', product.name).strip()
         product.description = data.get('description', product.description).strip()
         product.price = float(data.get('price', product.price))
         product.category = data.get('category', product.category).strip()
-        product.image_url = data.get('image_url', product.image_url).strip()
+        product.image_url = image_url
         
         db.session.commit()
         
         logger.info(f"Produto atualizado: {product.name} por {session['username']}")
-        return jsonify(product.to_dict())
+        
+        product_dict = product.to_dict()
+        # Aplicar clean_image_url antes de retornar
+        if product_dict.get('image_url'):
+            product_dict['image_url'] = clean_image_url(product_dict['image_url'])
+            product_dict['image_exists'] = check_image_exists(product_dict['image_url'])
+            product_dict['image_url_display'] = f"/uploads/{product_dict['image_url']}" if product_dict['image_exists'] else get_default_image_url()
+        else:
+            product_dict['image_exists'] = False
+            product_dict['image_url_display'] = get_default_image_url()
+        
+        return jsonify(product_dict)
         
     except Exception as e:
         db.session.rollback()
@@ -672,13 +798,14 @@ def update_product(product_id):
 @admin_required
 def delete_product(product_id):
     try:
-        product = Product.query.get(product_id)
+        product = db.session.get(Product, product_id)
         if not product:
             return jsonify({"error": "Produto não encontrado"}), 404
         
         # Remover arquivo de imagem se existir
         if product.image_url:
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image_url)
+            cleaned_url = clean_image_url(product.image_url)
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], cleaned_url)
             if os.path.exists(image_path):
                 try:
                     os.remove(image_path)
@@ -742,7 +869,7 @@ def get_categories():
 def health_check():
     try:
         # Testar conexão com banco
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         db_status = True
     except Exception:
         db_status = False
@@ -753,9 +880,97 @@ def health_check():
         "database_connected": db_status
     })
 
-@app.route('/uploads/<filename>')
+# ===== ROTA CORRIGIDA PARA UPLOADS =====
+@app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    """Rota corrigida para servir arquivos uploadados"""
+    try:
+        # Decodificar URL se necessário
+        filename = urllib.parse.unquote(filename)
+        
+        # Aplicar clean_image_url para extrair apenas o nome do arquivo
+        cleaned_filename = clean_image_url(filename)
+        
+        # Verificar se o arquivo existe
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], cleaned_filename)
+        if not os.path.exists(filepath):
+            logger.warning(f"Arquivo não encontrado: {cleaned_filename} (original: {filename})")
+            # Retornar imagem padrão em vez de 404
+            return send_from_directory('static', 'images/default-product.png')
+        
+        return send_from_directory(app.config['UPLOAD_FOLDER'], cleaned_filename)
+    except Exception as e:
+        logger.error(f"Erro ao servir arquivo {filename}: {str(e)}")
+        return send_from_directory('static', 'images/default-product.png')
+
+# ===== ROTA PARA CORRIGIR IMAGENS EXISTENTES =====
+@app.route('/api/fix-image-urls', methods=['POST'])
+@admin_required
+def fix_image_urls():
+    """Rota para corrigir URLs de imagens existentes"""
+    try:
+        fixed_count = fix_existing_image_urls()
+        return jsonify({
+            "message": f"✅ {fixed_count} URLs de imagem corrigidas no banco de dados",
+            "fixed_count": fixed_count
+        })
+    except Exception as e:
+        logger.error(f"Erro ao corrigir URLs: {e}")
+        return jsonify({"error": f"Erro ao corrigir URLs: {e}"}), 500
+
+# ===== ROTA PARA VERIFICAR IMAGENS AUSENTES =====
+@app.route('/api/admin/missing-images', methods=['GET'])
+@admin_required
+def get_missing_images():
+    """Retorna lista de produtos com imagens ausentes"""
+    try:
+        products = Product.query.filter(Product.image_url != '').all()
+        missing_images = []
+        
+        for product in products:
+            if product.image_url and not check_image_exists(product.image_url):
+                missing_images.append({
+                    'id': product.id,
+                    'name': product.name,
+                    'image_url': product.image_url,
+                    'cleaned_url': clean_image_url(product.image_url)
+                })
+        
+        return jsonify({
+            'missing_count': len(missing_images),
+            'products': missing_images
+        })
+    except Exception as e:
+        logger.error(f"Erro ao buscar imagens ausentes: {e}")
+        return jsonify({"error": f"Erro ao buscar imagens ausentes: {e}"}), 500
+
+# ===== ROTA PARA REMOVER IMAGENS AUSENTES =====
+@app.route('/api/admin/products/<int:product_id>/remove-missing-image', methods=['PUT'])
+@admin_required
+def remove_missing_image(product_id):
+    """Remove referência a imagem ausente de um produto"""
+    try:
+        product = db.session.get(Product, product_id)
+        if not product:
+            return jsonify({"error": "Produto não encontrado"}), 404
+        
+        if product.image_url and not check_image_exists(product.image_url):
+            old_image_url = product.image_url
+            product.image_url = ''
+            db.session.commit()
+            
+            logger.info(f"Imagem ausente removida do produto {product.name}: {old_image_url}")
+            return jsonify({
+                "message": "Referência de imagem ausente removida com sucesso",
+                "product": product.to_dict()
+            })
+        else:
+            return jsonify({"error": "Produto não tem imagem ausente ou imagem existe"}), 400
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Erro ao remover imagem ausente: {e}")
+        return jsonify({"error": f"Erro ao remover imagem ausente: {e}"}), 500
 
 # ===== INICIALIZAÇÃO DO BANCO =====
 def setup_database():
@@ -776,6 +991,11 @@ def setup_database():
                 db.session.add(admin_user)
                 db.session.commit()
                 logger.info("👤 Usuário admin criado: admin / admin123")
+            
+            # Corrigir URLs de imagens existentes
+            fixed_count = fix_existing_image_urls()
+            if fixed_count > 0:
+                logger.info(f"🔄 {fixed_count} URLs corrigidas na inicialização")
                 
             # Verificar produtos
             product_count = Product.query.count()

@@ -69,6 +69,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('images')">
+                                <i class="fas fa-images"></i> Gerenciar Imagens
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="#" onclick="showSection('profile')">
                                 <i class="fas fa-user-edit"></i> Meu Perfil
                             </a>
@@ -184,7 +189,7 @@
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6>Com Imagens</h6>
-                                            <h3 id="products-with-images">0</h3>
+                                            <h3 id="products-with-images">0/0</h3>
                                         </div>
                                         <div class="align-self-center">
                                             <i class="fas fa-image fa-2x"></i>
@@ -228,12 +233,13 @@
                                     <th width="120">Preço</th>
                                     <th width="150">Categoria</th>
                                     <th width="150">Data</th>
-                                    <th width="120">Ações</th>
+                                    <th width="120">Status Imagem</th>
+                                    <th width="150">Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="products-table">
                                 <tr>
-                                    <td colspan="7" class="text-center py-4">
+                                    <td colspan="8" class="text-center py-4">
                                         <div class="spinner-border text-primary" role="status">
                                             <span class="visually-hidden">Carregando...</span>
                                         </div>
@@ -285,6 +291,60 @@
                                                 <span class="visually-hidden">Carregando...</span>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seção de Gerenciar Imagens -->
+                <div id="images-section" class="section">
+                    <h3 class="mb-4"><i class="fas fa-images"></i> Gerenciar Imagens</h3>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card mb-4">
+                                <div class="card-header bg-warning text-dark">
+                                    <i class="fas fa-exclamation-triangle"></i> Imagens Ausentes
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h5>Produtos com Imagens Ausentes</h5>
+                                        <span class="badge bg-danger" id="missing-images-count">0</span>
+                                    </div>
+                                    <div id="missing-images-list">
+                                        <div class="text-center">
+                                            <div class="spinner-border" role="status">
+                                                <span class="visually-hidden">Carregando...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <i class="fas fa-tools"></i> Ferramentas
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <p>Corrigir URLs de imagem no banco de dados:</p>
+                                        <button class="btn btn-primary w-100" onclick="fixImageUrls()">
+                                            <i class="fas fa-wrench"></i> Corrigir URLs de Imagem
+                                        </button>
+                                        <div class="form-text">
+                                            Remove caminhos inválidos como "C:/fakepath/" das URLs
+                                        </div>
+                                    </div>
+                                    <hr>
+                                    <div>
+                                        <p>Verificar status das imagens:</p>
+                                        <button class="btn btn-secondary w-100" onclick="loadMissingImages()">
+                                            <i class="fas fa-sync"></i> Atualizar Lista
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -390,15 +450,19 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <div class="mb-3">
-                                                    <label for="product-image" class="form-label">Imagem do Produto</label>
-                                                    <input type="file" class="form-control" id="product-image"
-                                                        accept=".jpg,.jpeg,.png,.gif" multiple="false">
-                                                    <div class="form-text">Formatos aceitos: JPG, PNG, GIF (máx. 2MB)</div>  
-                                                </div>
-                                                <div id="image-preview" class="mt-2" style="display: none;">
-                                                    <img id="preview-image" src="#" alt="Preview" class="img-thumbnail" style="max-height: 150px;">
+                                                    <label for="product-image-url" class="form-label">URL da Imagem</label>
+                                                    <input type="text" class="form-control" id="product-image-url" placeholder="URL da imagem do produto">
+                                                    <div class="form-text">Ou use upload abaixo</div>
                                                 </div>
                                             </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="product-image-file" class="form-label">Upload de Imagem</label>
+                                            <input type="file" class="form-control" id="product-image-file" accept=".jpg,.jpeg,.png,.gif">
+                                            <div class="form-text">Formatos aceitos: JPG, PNG, GIF (máx. 2MB)</div>
+                                        </div>
+                                        <div id="image-preview" class="mt-2" style="display: none;">
+                                            <img id="preview-image" src="#" alt="Preview" class="img-thumbnail" style="max-height: 150px;">
                                         </div>
                                         <div class="d-grid">
                                             <button type="submit" class="btn btn-success btn-lg">
@@ -421,6 +485,7 @@
                                         <li><i class="fas fa-check text-success"></i> Use URLs válidas para imagens</li>
                                         <li><i class="fas fa-check text-success"></i> Categorias ajudam na organização</li>
                                         <li><i class="fas fa-check text-success"></i> Descrições melhoram a experiência</li>
+                                        <li><i class="fas fa-check text-success"></i> URLs serão automaticamente corrigidas</li>
                                     </ul>
                                 </div>
                             </div>
@@ -471,8 +536,14 @@
                                         <li><code>image_url</code> - URL da imagem</li>
                                     </ul>
                                     <p><strong>Exemplo:</strong></p>
-                                    <pre class="bg-light p-2 rounded"><code>name,price,description,category
-Produto 1,29.99,Descrição,Categoria A</code></pre>
+                                    <pre class="bg-light p-2 rounded"><code>name,price,description,category,image_url
+Produto 1,29.99,Descrição,Categoria A,imagem.jpg</code></pre>
+                                    <div class="alert alert-info">
+                                        <small>
+                                            <i class="fas fa-info-circle"></i>
+                                            URLs de imagem serão automaticamente corrigidas durante a importação
+                                        </small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -523,14 +594,10 @@ Produto 1,29.99,Descrição,Categoria A</code></pre>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="edit-product-image" class="form-label">Imagem do Produto</label>
-                                    <input type="file" class="form-control" id="edit-product-image"
-                                        accept=".jpg,.jpeg,.png,.gif">
-                                    <div class="form-text">Deixe em branco para manter a imagem atual</div>
+                                    <label for="edit-product-image" class="form-label">URL da Imagem</label>
+                                    <input type="text" class="form-control" id="edit-product-image">
+                                    <div class="form-text">URL será automaticamente corrigida</div>
                                 </div>
-                                <div id="edit-image-preview" class="mt-2">
-                                    <img id="edit-preview-image" src="#" alt="Preview" class="img-thumbnail" style="max-height: 150px;">
-                                </div>     
                             </div>
                         </div>
                     </form>

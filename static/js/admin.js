@@ -248,6 +248,8 @@ async function showSection(sectionName) {
         await loadUsers();
     } else if (sectionName === 'dashboard') {
         await loadDashboardStats();
+    } else if (sectionName === 'images') {
+        await loadMissingImages();
     }
 }
 
@@ -339,7 +341,7 @@ function showTableLoading() {
     if (tableBody) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center">
+                <td colspan="8" class="text-center">
                     <div class="spinner-border spinner-border-sm" role="status">
                         <span class="visually-hidden">Carregando...</span>
                     </div>
@@ -356,7 +358,7 @@ function showTableError(message) {
     if (tableBody) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center text-danger">
+                <td colspan="8" class="text-center text-danger">
                     <i class="fas fa-exclamation-triangle"></i> Erro ao carregar produtos: ${message}
                     <br><small>Verifique se a API está respondendo</small>
                     <br><button class="btn btn-sm btn-primary mt-2" onclick="loadProductsTable()">
@@ -376,7 +378,7 @@ function displayProductsTable(products) {
     if (products.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center text-muted py-5">
+                <td colspan="8" class="text-center text-muted py-5">
                     <i class="fas fa-box-open fa-3x mb-3 d-block"></i>
                     <h5>Nenhum produto cadastrado</h5>
                     <p class="mb-0">Adicione seu primeiro produto usando o formulário acima</p>
@@ -417,6 +419,7 @@ function displayProductsTable(products) {
                      onerror="this.src='https://via.placeholder.com/50x50?text=Erro'"
                      alt="${product.name}"
                      class="img-thumbnail">
+                ${!product.image_exists ? '<br><small class="text-danger">Imagem ausente</small>' : ''}
             </td>
             <td>
                 <strong>${escapeHtml(product.name)}</strong>
@@ -426,11 +429,21 @@ function displayProductsTable(products) {
             <td>${product.category ? `<span class="badge bg-primary">${escapeHtml(product.category)}</span>` : '<span class="text-muted">-</span>'}</td>
             <td><small class="text-muted">${createdDate}</small></td>
             <td>
+                <span class="badge ${product.image_exists ? 'bg-success' : 'bg-danger'}">
+                    ${product.image_exists ? 'Com imagem' : 'Sem imagem'}
+                </span>
+            </td>
+            <td>
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-warning" onclick="editProduct(${product.id})" title="Editar">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn btn-outline-danger" onclick="confirmDelete(${product.id}, '${escapeHtml(product.name)}')" title="Excluir">
+                    ${product.image_url ? `
+                        <button class="btn btn-outline-danger" onclick="removeProductImage(${product.id})" title="Remover Imagem">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : ''}
+                    <button class="btn btn-outline-danger" onclick="confirmDelete(${product.id}, '${escapeHtml(product.name)}')" title="Excluir Produto">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -449,6 +462,7 @@ function calculateStats(products) {
     const totalProducts = products.length;
     const categories = [...new Set(products.map(p => p.category).filter(c => c))];
     const productsWithImages = products.filter(p => p.image_url).length;
+    const productsWithExistingImages = products.filter(p => p.image_exists).length;
     const avgPrice = products.length > 0 
         ? products.reduce((sum, p) => sum + p.price, 0) / products.length 
         : 0;
@@ -463,13 +477,150 @@ function calculateStats(products) {
     
     if (totalProductsEl) totalProductsEl.textContent = totalProducts;
     if (totalCategoriesEl) totalCategoriesEl.textContent = categories.length;
-    if (productsWithImagesEl) productsWithImagesEl.textContent = productsWithImages;
+    if (productsWithImagesEl) productsWithImagesEl.textContent = `${productsWithExistingImages}/${productsWithImages}`;
     if (avgPriceEl) avgPriceEl.textContent = 'R$ ' + avgPrice.toFixed(2);
     if (productsCountEl) productsCountEl.textContent = totalProducts + ' produtos';
     
     // Mostrar seção de estatísticas
     if (statsSection) {
         statsSection.style.display = 'flex';
+    }
+}
+
+// Remover imagem do produto
+async function removeProductImage(productId) {
+    if (!confirm('Tem certeza que deseja remover a imagem deste produto?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/admin/products/${productId}/remove-image`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erro ao remover imagem');
+        }
+        
+        showMessage('Imagem removida com sucesso!', 'success');
+        loadProductsTable();
+        
+    } catch (error) {
+        console.error('Erro:', error);
+        showMessage('Erro ao remover imagem: ' + error.message, 'error');
+    }
+}
+
+// Carregar imagens ausentes
+async function loadMissingImages() {
+    try {
+        const response = await fetch(`${API_BASE}/admin/missing-images`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Erro ao carregar imagens ausentes');
+        }
+        
+        const data = await response.json();
+        displayMissingImages(data);
+        
+    } catch (error) {
+        document.getElementById('missing-images-list').innerHTML = `
+            <div class="alert alert-danger">Erro ao carregar imagens ausentes: ${error.message}</div>
+        `;
+    }
+}
+
+function displayMissingImages(data) {
+    const container = document.getElementById('missing-images-list');
+    const countElement = document.getElementById('missing-images-count');
+    
+    if (countElement) {
+        countElement.textContent = data.missing_count;
+    }
+    
+    if (data.missing_count === 0) {
+        container.innerHTML = `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i> Nenhuma imagem ausente encontrada!
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> 
+            Encontradas ${data.missing_count} produtos com imagens ausentes.
+        </div>
+        ${data.products.map(product => `
+            <div class="d-flex justify-content-between align-items-center mb-3 p-3 border rounded">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center mb-2">
+                        <strong class="me-2">${escapeHtml(product.name)}</strong>
+                        <span class="badge bg-secondary">#${product.id}</span>
+                    </div>
+                    <div>
+                        <small class="text-muted">URL no banco: ${escapeHtml(product.image_url)}</small><br>
+                        <small class="text-muted">URL limpa: ${escapeHtml(product.cleaned_url)}</small>
+                    </div>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-danger" onclick="removeMissingImage(${product.id})" title="Remover Referência">
+                        <i class="fas fa-trash"></i> Remover Referência
+                    </button>
+                </div>
+            </div>
+        `).join('')}
+    `;
+}
+
+// Remover referência de imagem ausente
+async function removeMissingImage(productId) {
+    if (!confirm('Tem certeza que deseja remover a referência desta imagem ausente?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/admin/products/${productId}/remove-missing-image`, {
+            method: 'PUT',
+            credentials: 'include'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(result.message, 'success');
+            loadMissingImages();
+            loadProductsTable();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        showMessage('Erro: ' + error.message, 'error');
+    }
+}
+
+// Corrigir URLs de imagem
+async function fixImageUrls() {
+    if (!confirm('Tem certeza que deseja corrigir todas as URLs de imagem no banco de dados?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/fix-image-urls`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(result.message, 'success');
+            loadProductsTable();
+            loadMissingImages();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        showMessage('Erro: ' + error.message, 'error');
     }
 }
 
