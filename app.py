@@ -191,10 +191,56 @@ def process_csv(file):
         logger.error(f"Erro ao processar CSV: {str(e)}")
         raise Exception(f"Erro ao processar CSV: {str(e)}")
 
-# ===== ROTAS PÚBLICAS =====
-@app.route('/')
+# ===== SOLUÇÃO 1: ROTA RAIZ ACEITANDO POST PARA WEBHOOK =====
+@app.route('/', methods=['GET', 'POST'])
 def catalog_page():
-    return render_template('index.html')
+    if request.method == 'GET':
+        # Sua lógica atual para exibir o catálogo
+        return render_template('index.html')
+    else:
+        # Processar webhook da Umbler Talk
+        try:
+            data = request.get_json()
+            if data:
+                logger.info(f"📨 Webhook recebido na raiz: {data}")
+                return jsonify({"status": "success", "message": "Webhook recebido com sucesso"}), 200
+            else:
+                # Se não for JSON, tentar form data
+                form_data = request.form.to_dict()
+                if form_data:
+                    logger.info(f"📨 Webhook recebido (form): {form_data}")
+                    return jsonify({"status": "success", "message": "Webhook recebido com sucesso"}), 200
+                else:
+                    logger.info("📨 Webhook recebido (vazio)")
+                    return jsonify({"status": "success", "message": "Webhook recebido"}), 200
+        except Exception as e:
+            logger.error(f"❌ Erro ao processar webhook: {str(e)}")
+            return jsonify({"status": "error", "message": f"Erro: {str(e)}"}), 400
+
+# ===== SOLUÇÃO 2: ROTA ESPECÍFICA PARA WEBHOOKS =====
+@app.route('/webhook/umbler', methods=['POST'])
+def umbler_webhook():
+    try:
+        data = request.get_json()
+        if data:
+            logger.info(f"📨 Webhook da Umbler (JSON): {data}")
+        else:
+            form_data = request.form.to_dict()
+            if form_data:
+                logger.info(f"📨 Webhook da Umbler (form): {form_data}")
+            else:
+                logger.info("📨 Webhook da Umbler recebido (vazio)")
+        
+        # Processar os dados do webhook aqui
+        # Ex: atualizar produtos, verificar estoque, etc.
+        
+        return jsonify({
+            "status": "success", 
+            "message": "Webhook da Umbler processado com sucesso"
+        }), 200
+    except Exception as e:
+        logger.error(f"❌ Erro no webhook da Umbler: {e}")
+        return jsonify({"status": "error", "message": f"Erro: {str(e)}"}), 400
 
 @app.route('/login')
 def login_page():
